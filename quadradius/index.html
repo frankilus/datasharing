@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QUADRADIUS — Tactical Tile Combat</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================== BOARD AREA ===================== -->
+  <div id="boardArea">
+    <div class="hazard-strip top"></div>
+    <canvas id="board"></canvas>
+    <div class="hazard-strip bottom"><span class="keepclear">KEEP CLEAR</span></div>
+
+    <!-- squadron intro plate -->
+    <div id="squadronPlate" class="hidden">
+      <div class="plate">Your Squadron</div>
+      <div class="plate-arrow"></div>
+    </div>
+
+    <!-- chat input overlay -->
+    <div id="chatBar" class="hidden">
+      <span class="chat-prompt">&gt;</span>
+      <input id="chatInput" maxlength="120" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+
+  <!-- ===================== CONTROL PANEL ===================== -->
+  <div id="panel">
+    <div class="panel-frame">
+      <div class="rivet tl"></div><div class="rivet tr"></div>
+
+      <!-- score / players -->
+      <div class="player-row">
+        <div class="odometer" id="count1"><span>0</span><span>2</span><span>0</span></div>
+        <div class="nameplate p1"><span id="name1">turbo</span></div>
+        <div class="player-dot teal"></div>
+      </div>
+      <div class="player-row">
+        <div class="odometer" id="count0"><span>0</span><span>2</span><span>0</span></div>
+        <div class="nameplate p0"><span id="name0">you</span></div>
+        <div class="player-dot red"></div>
+      </div>
+
+      <!-- red LED screen : power info / inventory -->
+      <div id="ledScreen">
+        <div id="ledTitle">QUADRADIUS</div>
+        <div id="ledBody">Select one of your pieces to view its power inventory. Land on a Power Orb to collect a random power.</div>
+        <div id="ledFooter"></div>
+      </div>
+
+      <!-- orb spawn indicator -->
+      <div class="orbspawn-row">
+        <div class="orbspawn-label">ORB SPAWN <span class="sub">ROUNDS<br>AMOUNT</span></div>
+        <div class="orbspawn-leds">
+          <div class="led-bar" id="ledRounds"></div>
+          <div class="led-bar amount" id="ledAmount"></div>
+        </div>
+      </div>
+
+      <div class="menu-row">
+        <button id="menuBtn" class="metal-btn red-btn">MENU</button>
+        <div class="moves-box"><span id="movesPlayed">0</span></div>
+        <div class="moves-tag">MOVES PLAYED</div>
+      </div>
+
+      <div class="rivet bl"></div><div class="rivet br"></div>
+    </div>
+
+    <!-- green screen : log / tips / chat -->
+    <div id="greenScreen">
+      <div id="logArea"></div>
+      <div id="chatHint">Type anywhere on the screen and hit ENTER to chat with opponent</div>
+    </div>
+
+    <div class="panel-bottom">
+      <div class="timer-leds" id="timerLeds"></div>
+      <div class="bottom-row">
+        <div class="match-tag" id="matchTag">TIMED MATCH:<br>30 SECONDS/MOVE</div>
+        <div class="logo">QUADRADIUS</div>
+        <button id="resignBtn" class="resign-btn">RESIGN</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MENU OVERLAY ===================== -->
+<div id="menuOverlay" class="overlay hidden">
+  <div class="menu-panel">
+    <div class="menu-title">MENU <span class="menu-logo">QUADRADIUS</span></div>
+    <div class="menu-buttons">
+      <button id="playAgainBtn" class="metal-btn red-btn big">PLAY<br>AGAIN</button>
+      <button id="newOppBtn" class="metal-btn tan-btn big">NEW<br>OPPONENT</button>
+      <button id="timerBtn" class="metal-btn grey-btn big">TIMER:<br>ON</button>
+      <button id="quitBtn" class="metal-btn grey-btn big">QUIT/<br>DISCONNECT</button>
+    </div>
+    <div class="menu-links">
+      <a href="directions.html" target="_blank">How to play &amp; Powerup Chart</a>
+      <button id="closeMenuBtn" class="link-btn">close menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== GAME OVER OVERLAY ===================== -->
+<div id="gameOverOverlay" class="overlay hidden">
+  <div class="menu-panel">
+    <div class="gameover-text" id="gameOverText">You Won!</div>
+    <div class="menu-buttons">
+      <button id="goPlayAgainBtn" class="metal-btn red-btn big">PLAY<br>AGAIN</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/powers.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
