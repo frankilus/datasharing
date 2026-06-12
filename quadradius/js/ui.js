@@ -119,11 +119,18 @@
         div.className = "pow-item";
         div.textContent = counts[k].length + " " + POWERS[k].name;
         if (!readOnly) {
-          if (piece.inhibited > 0) div.classList.add("disabled");
-          else {
+          const def = POWERS[k];
+          const noTargets = def.canUse && !def.canUse(G, piece);
+          if (piece.inhibited > 0 || noTargets) {
+            div.classList.add("disabled");
+            div.onclick = (e) => { e.stopPropagation(); sfx.denied(); };
+          } else {
             div.onclick = (e) => { e.stopPropagation(); activatePower(piece, counts[k][0], div); };
           }
-          div.onmouseenter = () => { $("ledFooter").textContent = POWERS[k].desc; };
+          div.onmouseenter = () => {
+            $("ledFooter").textContent = noTargets
+              ? "no valid targets in range" : def.desc;
+          };
           div.onmouseleave = () => { $("ledFooter").textContent = ""; };
         }
         wrap.appendChild(div);

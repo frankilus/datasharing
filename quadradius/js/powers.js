@@ -89,12 +89,15 @@
     {
       key: "acidic",
       name: "ACIDIC",
-      desc: "Floods the tiles in range with corrosive acid. Acidic tiles sink " +
-            "one level at the end of every round, and eventually dissolve into " +
-            "bottomless holes that destroy anything standing on them.",
-      apply(G, _piece, _t, tiles) {
-        for (const [c, r] of tiles) {
-          const t = G.tile(c, r);
+      desc: "Sprays corrosive acid onto every enemy piece in range, flooding " +
+            "the tile under each one. Acidic tiles sink one level at the end " +
+            "of every round and eventually dissolve into bottomless holes that " +
+            "destroy anything standing on them. Cannot be activated unless an " +
+            "enemy piece is in range.",
+      needsEnemies: true,
+      apply(G, piece, _t, tiles) {
+        for (const p of enemiesIn(G, piece, null, tiles)) {
+          const t = G.tile(p.col, p.row);
           if (!t.hole) t.acidic = true;
         }
       },
@@ -175,13 +178,13 @@
     {
       key: "wall",
       name: "WALL",
-      desc: "Erects towering barricades on every empty tile in range, raising " +
-            "them three levels into an imposing wall that reshapes the " +
-            "battlefield's traffic lanes.",
+      desc: "Erects a towering barricade across the entire line: every tile in " +
+            "range is raised three levels, and every piece standing on it rides " +
+            "up onto the wall.",
       apply(G, _piece, _t, tiles) {
         for (const [c, r] of tiles) {
           const t = G.tile(c, r);
-          if (!t.hole && !G.pieceAt(c, r)) G.setElev(c, r, 3);
+          if (!t.hole) G.setElev(c, r, 3);
         }
       },
     },
@@ -348,7 +351,11 @@
         desc: tpl.desc,
         scope: sc.id,
         targeted: false,
-        canUse: tpl.canUse || null,
+        // powers that need enemy targets can't fire (or be wasted) without one
+        canUse: tpl.needsEnemies
+          ? (G, piece) =>
+              enemiesIn(G, piece, null, scopeTiles(G, piece, sc.id)).length > 0
+          : (tpl.canUse || null),
         apply(G, piece, target) {
           const tiles = scopeTiles(G, piece, sc.id);
           tpl.apply(G, piece, target, tiles);

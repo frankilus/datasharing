@@ -96,7 +96,11 @@
         const net = pals - foes;
         return (net >= 2 && G.tile(piece.col, piece.row).elev < 2) ? 6 : Math.max(0, net);
       }
-      case "wall":      return 1;
+      case "wall": {
+        // raises the whole line now, pieces included
+        const net = pals - foes;
+        return (net >= 2 && G.tile(piece.col, piece.row).elev < 3) ? 5 : Math.max(0, net);
+      }
       case "tripwire":  return foes * 2.5;
       case "inhibit":   return foes * 3;
       case "spyware":   return foes * 1.2;
