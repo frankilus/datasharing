@@ -23,6 +23,8 @@
     armedPower: null,      // index into piece.powers, for targeted powers
     busy: false,           // input lock during AI turn / game over
     tipShown: 0,
+    dragCand: null,        // {piece, sx, sy, moved} mousedown-on-piece state
+    skipAnimFor: null,     // piece id whose next move event shouldn't animate
   };
 
   const TIPS = [
@@ -169,6 +171,9 @@
           break;
         case "move":
           sfx.move();
+          // slide the piece unless the player carried it there by hand
+          if (UI.skipAnimFor === ev.piece) UI.skipAnimFor = null;
+          else Render.animateMove(ev.piece, ev.from, ev.to);
           break;
         case "capture":
           sfx.capture();
@@ -268,11 +273,18 @@
 
   /* ---------------- board input ---------------- */
 
-  document.getElementById("board").addEventListener("mousedown", (e) => {
+  const boardEl = document.getElementById("board");
+
+  function boardPos(e) {
+    const rect = boardEl.getBoundingClientRect();
+    return [e.clientX - rect.left, e.clientY - rect.top];
+  }
+
+  boardEl.addEventListener("mousedown", (e) => {
     if (UI.busy || !UI.G || UI.G.winner !== null) return;
     const G = UI.G;
-    const rect = e.target.getBoundingClientRect();
-    const hit = Render.pickTile(e.clientX - rect.left, e.clientY - rect.top);
+    const [bx, by] = boardPos(e);
+    const hit = Render.pickTile(bx, by);
     if (!hit) { clearSelection(); return; }
     const [c, r] = hit;
     const piece = G.pieceAt(c, r);
@@ -291,7 +303,7 @@
       return;
     }
 
-    // move?
+    // click-to-move onto a highlighted tile?
     if (UI.selectedPiece &&
         Render.state.legal.some(([lc, lr]) => lc === c && lr === r)) {
       if (G.doMove(UI.selectedPiece, c, r)) {
@@ -302,9 +314,10 @@
       return;
     }
 
-    // select own piece
+    // select own piece — and arm it for drag-carrying
     if (piece && piece.owner === me && (UI.mode === "hotseat" || me === 0)) {
       selectPiece(piece);
+      UI.dragCand = { piece, sx: bx, sy: by, moved: false };
       return;
     }
 
@@ -316,6 +329,39 @@
     }
 
     clearSelection();
+  });
+
+  boardEl.addEventListener("mousemove", (e) => {
+    if (!UI.dragCand) return;
+    const [bx, by] = boardPos(e);
+    const d = UI.dragCand;
+    if (!d.moved && Math.hypot(bx - d.sx, by - d.sy) > 6) d.moved = true;
+    if (d.moved) Render.state.drag = { id: d.piece.id, x: bx, y: by };
+  });
+
+  window.addEventListener("mouseup", (e) => {
+    const d = UI.dragCand;
+    UI.dragCand = null;
+    if (!d) return;
+    Render.state.drag = null;
+    if (!d.moved) return;                    // plain click: selection stands
+    if (UI.busy || !UI.G || UI.G.winner !== null) return;
+    const G = UI.G;
+    const [bx, by] = boardPos(e);
+    const hit = Render.pickTile(bx, by);
+    if (hit &&
+        Render.state.legal.some(([lc, lr]) => lc === hit[0] && lr === hit[1])) {
+      UI.skipAnimFor = d.piece.id;           // it's already under the cursor
+      if (G.doMove(d.piece, hit[0], hit[1])) {
+        clearSelection();
+        pumpEvents();
+        endHumanTurn();
+        return;
+      }
+      UI.skipAnimFor = null;
+    }
+    // invalid drop: the piece snaps home, selection stays for a retry
+    sfx.denied();
   });
 
   /* ---------------- turn flow ---------------- */

@@ -54,6 +54,9 @@
     const aggression = 1 + Math.min(3, G.movesPlayed / 80);
     const caution = Math.max(0, 6 - G.movesPlayed / 25);
 
+    // moving a mined piece detonates it — only worth it for a desperate trade
+    if (piece.mined) s -= victim ? 20 : 45;
+
     if (victim) s += (12 + victim.powers.length * 2) * aggression;
     if (t.orb) s += 8;
     if (t.acidic) s -= 4;
@@ -80,14 +83,21 @@
     const pals = def.scope ? friendsInScope(G, piece, def.scope) : 0;
 
     switch (base) {
-      case "trench":    return foes >= 2 ? 9 + foes * 2 : foes * 2;
+      case "trench": {
+        // sinks friend and foe alike now — want a clear majority of foes
+        const net = foes - pals;
+        return net >= 2 ? 9 + net * 2 : Math.max(0, net * 2);
+      }
       case "invert":    return foes >= 2 ? 7 + foes : 0;
       case "flatten":   return 0.5;
       case "acidic":    return foes >= 3 ? 8 : foes;
-      case "plateau":
-        return (pals >= 3 && G.tile(piece.col, piece.row).elev < 2) ? 6 : Math.min(pals, 2);
+      case "plateau": {
+        // lifts friend and foe alike now
+        const net = pals - foes;
+        return (net >= 2 && G.tile(piece.col, piece.row).elev < 2) ? 6 : Math.max(0, net);
+      }
       case "wall":      return 1;
-      case "tripwire":  return 3;
+      case "tripwire":  return foes * 2.5;
       case "inhibit":   return foes * 3;
       case "spyware":   return foes * 1.2;
       case "purify":    return foes * 2.5;

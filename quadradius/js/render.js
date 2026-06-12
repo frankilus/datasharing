@@ -23,7 +23,9 @@
     legal: [],           // highlighted move targets
     targeting: false,    // teleport-style targeting mode
     targetTiles: [],
-    viewer: 0,           // whose secrets (tripwires) are visible
+    viewer: 0,
+    drag: null,          // {id, x, y} piece carried by the cursor
+    pieceAnims: {},      // pieceId -> sliding move animation
     anims: [],
     shakes: 0,
     time: 0,
@@ -46,11 +48,19 @@
   }
   window.addEventListener("resize", resize);
 
+  const ELEV_LIFT = 0.10;   // px offset per elevation level, in tile sizes
+
+  function visElev(t) {
+    if (t.hole) return 0;
+    if (t.renderElev === undefined) t.renderElev = t.elev;
+    return t.renderElev;
+  }
+
   function tileCenter(c, r) {
-    const elev = R.G.tile(c, r).hole ? 0 : R.G.tile(c, r).elev;
     return {
       x: R.ox + c * R.tileSize + R.tileSize / 2,
-      y: R.oy + r * R.tileSize + R.tileSize / 2 - elev * R.tileSize * 0.07,
+      y: R.oy + r * R.tileSize + R.tileSize / 2 -
+         visElev(R.G.tile(c, r)) * R.tileSize * ELEV_LIFT,
     };
   }
 
@@ -104,22 +114,46 @@
       return;
     }
 
-    const lift = t.elev * s * 0.07;          // vertical offset for elevation
+    const ev = visElev(t);
+    const lift = ev * s * ELEV_LIFT;         // vertical offset for elevation
     const ty = y - lift;
-    const bright = 1 + t.elev * 0.09;        // higher = brighter
+    const bright = 1 + ev * 0.10;            // higher = brighter
 
-    // side extrusion for raised tiles
-    if (t.elev > 0) {
-      ctx.fillStyle = shade("#6b6258", 0.85);
+    if (lift > 0.5) {
+      // raised platform: extruded side wall with seam lines per level
+      const wall = ctx.createLinearGradient(x, ty + s, x, ty + s + lift);
+      wall.addColorStop(0, "#776d5f");
+      wall.addColorStop(1, "#39342c");
+      ctx.fillStyle = wall;
       ctx.fillRect(x + 1, ty + s - 2, s - 2, lift + 2);
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.fillRect(x + 1, ty + s - 2, s - 2, 3);
-    }
-
-    // shadow pooling in trenches
-    if (t.elev < 0) {
-      ctx.fillStyle = "rgba(0,0,0," + Math.min(0.55, -t.elev * 0.16) + ")";
+      ctx.strokeStyle = "rgba(0,0,0,0.4)";
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= Math.floor(ev); i++) {
+        const yy = ty + s - 2 + (i / ev) * lift;
+        ctx.beginPath();
+        ctx.moveTo(x + 2, yy);
+        ctx.lineTo(x + s - 2, yy);
+        ctx.stroke();
+      }
+    } else if (lift < -0.5) {
+      // trench: dark cavity with a visible upper wall above the sunken floor
+      ctx.fillStyle = "#0d0c0a";
       ctx.fillRect(x, y, s, s);
+      const wallH = -lift;
+      const wall = ctx.createLinearGradient(x, y, x, y + wallH);
+      wall.addColorStop(0, "#211d18");
+      wall.addColorStop(1, "#453e34");
+      ctx.fillStyle = wall;
+      ctx.fillRect(x + 1, y, s - 2, wallH);
+      ctx.strokeStyle = "rgba(0,0,0,0.45)";
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= Math.floor(-ev); i++) {
+        const yy = y + (i / -ev) * wallH;
+        ctx.beginPath();
+        ctx.moveTo(x + 2, yy);
+        ctx.lineTo(x + s - 2, yy);
+        ctx.stroke();
+      }
     }
 
     // face
@@ -157,20 +191,23 @@
     ctx.stroke();
     ctx.restore();
 
+    // trench floors pool extra shadow
+    if (ev < 0) {
+      ctx.fillStyle = "rgba(0,0,0," + Math.min(0.5, -ev * 0.12) + ")";
+      ctx.fillRect(x + 1, ty + 1, s - 2, s - 2);
+    }
+
     // acid shimmer
     if (t.acidic) {
       ctx.fillStyle = "rgba(120,200,60," + (0.10 + 0.06 * Math.sin(R.time / 300 + c + r)) + ")";
       ctx.fillRect(x + 1, ty + 1, s - 2, s - 2);
     }
 
-    // tripwire marker — only for its owner
-    if (t.tripwire !== null && t.tripwire === R.viewer) {
-      ctx.save();
-      ctx.strokeStyle = "rgba(255,220,80,0.5)";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 5]);
-      ctx.strokeRect(x + s*0.18, ty + s*0.18, s*0.64, s*0.64);
-      ctx.restore();
+    // elevation badge so levels read at a glance
+    if (t.elev !== 0) {
+      ctx.font = "bold " + Math.round(s * 0.17) + "px 'Courier New', monospace";
+      ctx.fillStyle = t.elev > 0 ? "rgba(255,255,255,0.45)" : "rgba(255,196,110,0.55)";
+      ctx.fillText((t.elev > 0 ? "+" : "") + t.elev, x + s * 0.07, ty + s * 0.22);
     }
 
     // power orb
@@ -313,6 +350,22 @@
       ctx.fill();
     }
 
+    // strapped mine — blinking charge clamped to the rim
+    if (p.mined) {
+      const blink = 0.5 + 0.5 * Math.sin(R.time / 180);
+      ctx.fillStyle = "#23201b";
+      ctx.beginPath();
+      ctx.arc(px - ringR*0.72, py + ringR*0.35, s*0.06, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,46,20," + (0.35 + 0.65 * blink) + ")";
+      ctx.beginPath();
+      ctx.arc(px - ringR*0.72, py + ringR*0.35, s*0.024, 0, Math.PI*2);
+      ctx.fill();
+    }
+
     // climbing gear — small hook glyph
     if (p.climb) {
       ctx.strokeStyle = "rgba(40,36,30,0.85)";
@@ -354,7 +407,7 @@
     const color = R.targeting ? "rgba(255,200,60," : "rgba(140,255,180,";
     for (const [c, r] of list) {
       const t = R.G.tile(c, r);
-      const lift = t.hole ? 0 : t.elev * s * 0.07;
+      const lift = visElev(t) * s * ELEV_LIFT;
       const x = R.ox + c * s, y = R.oy + r * s - lift;
       ctx.strokeStyle = color + pulse + ")";
       ctx.lineWidth = 3;
@@ -403,9 +456,34 @@
 
   /* ---------------- main frame ---------------- */
 
+  // sliding move animation for a piece (used for clicks, AI, transports)
+  function animateMove(id, from, to) {
+    R.pieceAnims[id] = { fc: from[0], fr: from[1], tc: to[0], tr: to[1],
+                         t0: performance.now(), dur: 230 };
+  }
+
+  function animatedPos(p) {
+    const a = R.pieceAnims[p.id];
+    if (!a) return null;
+    const k = (R.time - a.t0) / a.dur;
+    if (k >= 1) { delete R.pieceAnims[p.id]; return null; }
+    const e = k < 0.5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2) / 2;  // ease in-out
+    const f = tileCenter(a.fc, a.fr), t = tileCenter(a.tc, a.tr);
+    return { x: f.x + (t.x - f.x) * e, y: f.y + (t.y - f.y) * e };
+  }
+
   function frame(now) {
     R.time = now;
     if (!R.G) { requestAnimationFrame(frame); return; }
+
+    // ease tile elevations toward their true values
+    for (let c = 0; c < R.G.COLS; c++)
+      for (let r = 0; r < R.G.ROWS; r++) {
+        const t = R.G.tile(c, r);
+        if (t.renderElev === undefined) t.renderElev = t.elev;
+        t.renderElev += (t.elev - t.renderElev) * 0.10;
+        if (Math.abs(t.elev - t.renderElev) < 0.01) t.renderElev = t.elev;
+      }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
@@ -423,16 +501,22 @@
     const order = [];
     for (let c = 0; c < R.G.COLS; c++)
       for (let r = 0; r < R.G.ROWS; r++) order.push([c, r]);
-    order.sort((a, b) => R.G.tile(a[0], a[1]).elev - R.G.tile(b[0], b[1]).elev);
+    order.sort((a, b) => visElev(R.G.tile(a[0], a[1])) - visElev(R.G.tile(b[0], b[1])));
     for (const [c, r] of order) drawTile(c, r);
 
     drawHighlights();
 
-    // pieces, top row first for nicer overlap
-    const ps = R.G.pieces.filter(p => p.alive).sort((a, b) => a.row - b.row);
+    // pieces, top row first; the dragged piece is drawn last, on the cursor
+    const ps = R.G.pieces
+      .filter(p => p.alive && !(R.drag && R.drag.id === p.id))
+      .sort((a, b) => a.row - b.row);
     for (const p of ps) {
-      const { x, y } = tileCenter(p.col, p.row);
-      drawPiece(p, x, y, 1);
+      const pos = animatedPos(p) || tileCenter(p.col, p.row);
+      drawPiece(p, pos.x, pos.y, 1);
+    }
+    if (R.drag) {
+      const p = R.G.pieces.find(q => q.id === R.drag.id && q.alive);
+      if (p) drawPiece(p, R.drag.x, R.drag.y, 1.12);
     }
 
     drawFx(now);
@@ -460,6 +544,15 @@
     pickTile,
     tileCenter,
     addFx,
-    setGame(G) { R.G = G; R.selected = null; R.legal = []; R.targeting = false; resize(); },
+    animateMove,
+    setGame(G) {
+      R.G = G;
+      R.selected = null;
+      R.legal = [];
+      R.targeting = false;
+      R.drag = null;
+      R.pieceAnims = {};
+      resize();
+    },
   };
 })();

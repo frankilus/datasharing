@@ -49,27 +49,22 @@
     {
       key: "trench",
       name: "TRENCH",
-      desc: "Drops every tile in range two levels, digging a deep trench. " +
-            "Enemy pieces caught at the bottom cannot climb back out without help, " +
-            "leaving them stranded and easy to pick off.",
-      apply(G, piece, _t, tiles) {
-        for (const [c, r] of tiles) {
-          if (c === piece.col && r === piece.row) continue;
-          G.changeElev(c, r, -2);
-        }
+      desc: "Drops the entire line two levels, digging a deep trench. Every " +
+            "tile in range sinks — and every piece standing on them, yours and " +
+            "the enemy's alike, sinks with it. Pieces caught at the bottom " +
+            "cannot climb back out without help.",
+      apply(G, _piece, _t, tiles) {
+        for (const [c, r] of tiles) G.changeElev(c, r, -2);
       },
     },
     {
       key: "plateau",
       name: "PLATEAU",
-      desc: "Raises the tile under each of your pieces in range by two levels, " +
-            "lifting your squadron onto high ground where lower enemies cannot " +
-            "land on them.",
-      apply(G, piece, _t, tiles) {
-        for (const [c, r] of tiles) {
-          const p = G.pieceAt(c, r);
-          if (p && p.owner === piece.owner) G.changeElev(c, r, +2);
-        }
+      desc: "Raises the entire line two levels into a platform. Every tile in " +
+            "range is lifted — and every piece standing on them, yours and the " +
+            "enemy's alike, rides up with it onto high ground.",
+      apply(G, _piece, _t, tiles) {
+        for (const [c, r] of tiles) G.changeElev(c, r, +2);
       },
     },
     {
@@ -107,15 +102,13 @@
     {
       key: "tripwire",
       name: "TRIPWIRE",
-      desc: "Rigs every unoccupied tile in range with an invisible tripwire. " +
-            "The first enemy piece to step on a rigged tile is instantly " +
-            "destroyed. Your opponent cannot see where the wires are.",
+      desc: "Straps a proximity mine to every enemy piece in range. The moment " +
+            "a mined piece moves, the mine detonates and destroys it. Mined " +
+            "pieces can still activate powers — and PURIFY can defuse the mine.",
       apply(G, piece, _t, tiles) {
-        for (const [c, r] of tiles) {
-          const t = G.tile(c, r);
-          if (!t.hole && !G.pieceAt(c, r)) t.tripwire = piece.owner;
-        }
+        for (const p of enemiesIn(G, piece, null, tiles)) p.mined = true;
       },
+      useEnemies: true,
     },
     {
       key: "inhibit",
@@ -150,6 +143,7 @@
           p.powers = [];
           p.buggedBy = {};
           p.inhibited = 0;
+          p.mined = false;
           p.climb = false;
           p.jumpProof = 0;
         }
@@ -262,7 +256,7 @@
       name: "JUMP PROOF",
       desc: "Armors this piece with a hazard-striped shell for the next 12 " +
             "rounds. Enemy pieces cannot land on it while the shell holds. It " +
-            "can still be destroyed by holes, acid, bombs and tripwires.",
+            "can still be destroyed by holes, acid, bombs and mines.",
       apply(G, piece) { piece.jumpProof = 12; },
     },
     {
@@ -332,9 +326,11 @@
       apply(G, piece, target) {
         const foe = G.pieceAt(target[0], target[1]);
         if (!foe) return;
-        const c = piece.col, r = piece.row;
-        piece.col = foe.col; piece.row = foe.row;
-        foe.col = c; foe.row = r;
+        const mine = [piece.col, piece.row], theirs = [foe.col, foe.row];
+        G.emit("move", { piece: piece.id, from: mine, to: theirs });
+        G.emit("move", { piece: foe.id, from: theirs, to: mine });
+        piece.col = theirs[0]; piece.row = theirs[1];
+        foe.col = mine[0]; foe.row = mine[1];
       },
     },
   ];

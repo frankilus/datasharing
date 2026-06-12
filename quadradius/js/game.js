@@ -28,7 +28,6 @@
             hole: false,
             acidic: false,
             orb: false,
-            tripwire: null,   // owner index or null
           };
         }
       }
@@ -79,6 +78,7 @@
         powers: [],
         buggedBy: {},     // {opponentIndex: true}
         inhibited: 0,
+        mined: false,      // strapped mine: detonates if the piece moves
         climb: false,
         jumpProof: 0,      // rounds of protection remaining
         alive: true,
@@ -158,6 +158,14 @@
         this.emit("capture", { at: [c, r] });
       }
 
+      // strapped mine: moving detonates it
+      if (piece.mined) {
+        piece.mined = false;
+        this.destroyPiece(piece, "mine");
+        this.log("A strapped mine detonated — " + this.names[piece.owner] +
+                 "'s piece was destroyed!");
+      }
+
       this.afterAction(piece, null);
       return true;
     }
@@ -215,18 +223,9 @@
       this.emit("turn", { turn: this.turn });
     }
 
-    // tripwires / orbs on the tile a piece arrives at
+    // orbs on the tile a piece arrives at
     resolveLanding(piece) {
       const t = this.tile(piece.col, piece.row);
-
-      if (t.tripwire !== null && t.tripwire !== piece.owner) {
-        t.tripwire = null;
-        this.destroyPiece(piece, "tripwire");
-        this.log("A hidden tripwire destroyed one of " +
-                 this.names[piece.owner] + "'s pieces!");
-        this.emit("explosion", { at: [piece.col, piece.row] });
-        return;
-      }
 
       if (t.orb) {
         t.orb = false;
@@ -306,7 +305,6 @@
       t.hole = true;
       t.orb = false;
       t.acidic = false;
-      t.tripwire = null;
       t.elev = 0;
       const p = this.pieceAt(c, r);
       if (p) {
