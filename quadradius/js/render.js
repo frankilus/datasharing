@@ -456,10 +456,18 @@
 
   /* ---------------- main frame ---------------- */
 
-  // sliding move animation for a piece (used for clicks, AI, transports)
+  // sliding move animation for a piece (used for clicks, AI, transports).
+  // Anything farther than one square floats: the piece lifts off, arcs
+  // across the board and sets down, instead of just sliding.
   function animateMove(id, from, to) {
-    R.pieceAnims[id] = { fc: from[0], fr: from[1], tc: to[0], tr: to[1],
-                         t0: performance.now(), dur: 230 };
+    const dist = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    const float = dist > 1.01;
+    R.pieceAnims[id] = {
+      fc: from[0], fr: from[1], tc: to[0], tr: to[1],
+      t0: performance.now(),
+      dur: float ? Math.min(1000, 350 + dist * 110) : 230,
+      float,
+    };
   }
 
   function animatedPos(p) {
@@ -469,7 +477,16 @@
     if (k >= 1) { delete R.pieceAnims[p.id]; return null; }
     const e = k < 0.5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2) / 2;  // ease in-out
     const f = tileCenter(a.fc, a.fr), t = tileCenter(a.tc, a.tr);
-    return { x: f.x + (t.x - f.x) * e, y: f.y + (t.y - f.y) * e };
+    const pos = { x: f.x + (t.x - f.x) * e, y: f.y + (t.y - f.y) * e,
+                  scale: 1, floating: false, groundY: 0 };
+    if (a.float) {
+      const arc = Math.sin(Math.PI * e);   // 0 -> 1 -> 0 over the flight
+      pos.floating = true;
+      pos.groundY = pos.y;
+      pos.y -= arc * R.tileSize * 0.6;     // lift off the board
+      pos.scale = 1 + arc * 0.22;          // closer to the camera
+    }
+    return pos;
   }
 
   function frame(now) {
@@ -506,13 +523,27 @@
 
     drawHighlights();
 
-    // pieces, top row first; the dragged piece is drawn last, on the cursor
+    // pieces, top row first; floating pieces render above everything,
+    // and the dragged piece rides the cursor on top of all
     const ps = R.G.pieces
       .filter(p => p.alive && !(R.drag && R.drag.id === p.id))
       .sort((a, b) => a.row - b.row);
+    const airborne = [];
     for (const p of ps) {
       const pos = animatedPos(p) || tileCenter(p.col, p.row);
-      drawPiece(p, pos.x, pos.y, 1);
+      if (pos.floating) airborne.push([p, pos]);
+      else drawPiece(p, pos.x, pos.y, pos.scale || 1);
+    }
+    for (const [p, pos] of airborne) {
+      // detached ground shadow tracking the flight path
+      const h = (pos.groundY - pos.y) / (R.tileSize * 0.6);  // 0..1 altitude
+      ctx.fillStyle = "rgba(0,0,0," + (0.4 - h * 0.22) + ")";
+      ctx.beginPath();
+      ctx.ellipse(pos.x, pos.groundY + R.tileSize * 0.16,
+                  R.tileSize * (0.34 - h * 0.1), R.tileSize * (0.15 - h * 0.05),
+                  0, 0, Math.PI * 2);
+      ctx.fill();
+      drawPiece(p, pos.x, pos.y, pos.scale);
     }
     if (R.drag) {
       const p = R.G.pieces.find(q => q.id === R.drag.id && q.alive);
