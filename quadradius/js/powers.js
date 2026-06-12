@@ -321,12 +321,17 @@
       key: "switcheroo",
       name: "SWITCHEROO",
       desc: "Hijacks an enemy transport beam, instantly swapping this piece's " +
-            "position with a random enemy piece. Chaos guaranteed.",
+            "position with an enemy piece of your choosing. After activating, " +
+            "click the enemy piece to swap with.",
+      targeted: true,
       canUse(G, piece) { return G.pieces.some(p => p.alive && p.owner !== piece.owner); },
-      apply(G, piece) {
-        const foes = G.pieces.filter(p => p.alive && p.owner !== piece.owner);
-        if (!foes.length) return;
-        const foe = foes[(Math.random() * foes.length) | 0];
+      validTarget(G, piece, c, r) {
+        const p = G.pieceAt(c, r);
+        return !!p && p.owner !== piece.owner;
+      },
+      apply(G, piece, target) {
+        const foe = G.pieceAt(target[0], target[1]);
+        if (!foe) return;
         const c = piece.col, r = piece.row;
         piece.col = foe.col; piece.row = foe.row;
         foe.col = c; foe.row = r;
