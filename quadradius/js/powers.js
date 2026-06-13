@@ -153,18 +153,18 @@
     {
       key: "learn",
       name: "LEARN",
-      desc: "Scans every other piece in range — friend and foe — and copies all " +
-            "of their stored powers into this piece's own inventory. The other " +
-            "pieces keep theirs; this piece simply inherits a copy of everything.",
-      // only fires if some other piece in range is actually carrying a power
+      desc: "Scans your other friendly pieces in range and copies all of their " +
+            "stored powers into this piece's own inventory. Your allies keep " +
+            "theirs; this piece simply inherits a copy of everything they hold.",
+      // only fires if a friendly piece in range is actually carrying a power
       needsTargets: (G, piece, tiles) => tiles.some(([c, r]) => {
         const p = G.pieceAt(c, r);
-        return p && p !== piece && p.powers.length > 0;
+        return p && p !== piece && p.owner === piece.owner && p.powers.length > 0;
       }),
       apply(G, piece, _t, tiles) {
         for (const [c, r] of tiles) {
           const p = G.pieceAt(c, r);
-          if (p && p !== piece)
+          if (p && p !== piece && p.owner === piece.owner)
             for (const k of p.powers) piece.powers.push(k);
         }
       },
