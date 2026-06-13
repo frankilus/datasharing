@@ -65,10 +65,10 @@
     {
       key: "trench",
       name: "TRENCH",
-      desc: "Drops the entire line two levels, digging a deep trench. Every " +
-            "tile in range sinks — and every piece standing on them, yours and " +
-            "the enemy's alike, sinks with it. Pieces caught at the bottom " +
-            "cannot climb back out without help.",
+      desc: "Sinks the entire line down toward the trench floor — the lowest " +
+            "level. Every tile in range drops, and every piece standing on " +
+            "them, yours and the enemy's alike, sinks with it. Pieces caught at " +
+            "the bottom cannot climb back out without help.",
       apply(G, _piece, _t, tiles) {
         for (const [c, r] of tiles) G.changeElev(c, r, -2);
       },
@@ -139,10 +139,10 @@
     {
       key: "spyware",
       name: "SPYWARE",
-      desc: "Attaches a visible bugging device to any opponent's pieces " +
-            "surrounding you. You can then view their power inventory. Useful " +
-            "for keeping tabs on what new powers they collect and predicting " +
-            "their plans.",
+      desc: "Attaches a visible bugging device to every enemy piece in range. " +
+            "You can then click those pieces to view their power inventory. " +
+            "Useful for keeping tabs on what new powers they collect and " +
+            "predicting their plans.",
       needsTargets: (G, piece, tiles) => enemiesIn(G, piece, null, tiles).length > 0,
       apply(G, piece, _t, tiles) {
         for (const p of enemiesIn(G, piece, null, tiles)) p.buggedBy[piece.owner] = true;
@@ -289,16 +289,16 @@
     {
       key: "climb",
       name: "CLIMB",
-      desc: "Permanently fits this piece with climbing gear. It can scale any " +
-            "elevation in a single move — trenches and walls no longer stop it.",
+      desc: "Permanently fits this piece with a propeller rotor. It can scale " +
+            "any elevation in a single move — trenches and walls no longer stop it.",
       apply(G, piece) { piece.climb = true; },
     },
     {
       key: "jump_proof",
       name: "JUMP PROOF",
-      desc: "Armors this piece with a hazard-striped shell for the next 12 " +
-            "rounds. Enemy pieces cannot land on it while the shell holds. It " +
-            "can still be destroyed by holes, acid, bombs and mines.",
+      desc: "Wraps this piece in a shimmering energy force field for the next " +
+            "12 rounds. Enemy pieces cannot land on it while the field holds. " +
+            "It can still be destroyed by holes, acid, bombs and mines.",
       apply(G, piece) { piece.jumpProof = 12; },
     },
     {

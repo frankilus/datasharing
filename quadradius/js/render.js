@@ -48,7 +48,7 @@
   }
   window.addEventListener("resize", resize);
 
-  const ELEV_LIFT = 0.14;   // px offset per elevation level, in tile sizes
+  const ELEV_LIFT = 0.24;   // px offset per elevation level, in tile sizes
 
   function visElev(t) {
     if (t.hole) return 0;
@@ -115,103 +115,130 @@
     }
 
     const ev = visElev(t);
-    const lift = ev * s * ELEV_LIFT;         // vertical offset for elevation
+    const step = s * ELEV_LIFT;
+    const lift = ev * step;
     const ty = y - lift;
-    const bright = 1 + ev * 0.08;            // higher = brighter
-    const px3d = s * 0.06 * Math.max(0, ev); // slight rightward skew for raised slabs
+    const bright = 1 + (ev > 0 ? ev * 0.17 : ev * 0.24);  // high=brighter, low=darker
 
-    if (lift > 0.5) {
-      // raised slab: soft contact shadow + extruded front & right side walls
+    const nElev = (cc, rr) => {
+      if (cc < 0 || cc >= R.G.COLS || rr < 0 || rr >= R.G.ROWS) return 0;
+      const nt = R.G.tile(cc, rr);
+      return nt.hole ? 0 : visElev(nt);
+    };
+
+    // Soft drop shadow cast down-and-right onto lower neighbours. The dark
+    // caster rect sits at the top-face position and is immediately overdrawn by
+    // the face, so only its blurred offset shadow remains on the board below.
+    if (ev > 0) {
       ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.55)";
-      ctx.shadowBlur = lift * 1.6;
-      ctx.shadowOffsetY = lift * 0.55;
-      ctx.fillStyle = "rgba(0,0,0,0.30)";
-      ctx.fillRect(x + 3, y + 3, s - 6, s - 6);
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = lift * 1.3;
+      ctx.shadowOffsetX = lift * 0.45;
+      ctx.shadowOffsetY = lift * 0.75;
+      ctx.fillStyle = "#15120e";
+      ctx.fillRect(x + 2, ty + 2, s - 4, s - 4);
       ctx.restore();
-
-      // front wall (slab thickness)
-      const front = ctx.createLinearGradient(x, ty + s - lift, x, ty + s);
-      front.addColorStop(0, "#736a5d");
-      front.addColorStop(1, "#2f2b24");
-      ctx.fillStyle = front;
-      ctx.fillRect(x + 1, ty + s - 1, s - 2, lift + 2);
-      // right wall, catching a touch of warm rim light
-      const right = ctx.createLinearGradient(x + s - 2, ty, x + s - 2 + px3d, ty);
-      right.addColorStop(0, "#5d544868");
-      right.addColorStop(1, "#3a352c");
-      if (px3d > 0.5) { ctx.fillStyle = right; ctx.fillRect(x + s - 2, ty + 1, px3d, s + lift); }
-      // per-level seam grooves on the front wall
-      ctx.strokeStyle = "rgba(0,0,0,0.4)";
-      ctx.lineWidth = 1;
-      for (let i = 1; i < ev; i++) {
-        const yy = ty + s - 1 + (i / ev) * lift;
-        ctx.beginPath(); ctx.moveTo(x + 2, yy); ctx.lineTo(x + s - 2, yy); ctx.stroke();
-      }
-      // warm accent along the top lip
-      ctx.fillStyle = "rgba(255,212,150,0.22)";
-      ctx.fillRect(x + 1, ty + s - 1, s - 2, 2);
-    } else if (lift < -0.5) {
-      // trench: looking down into a recessed pit with shaded inner walls
-      const depth = -lift;
-      ctx.fillStyle = "#15120d";
-      ctx.fillRect(x, y, s, s);
-      // upper/back inner wall, lighter toward the sunken floor
-      const back = ctx.createLinearGradient(x, y, x, y + depth);
-      back.addColorStop(0, "#0c0a07");
-      back.addColorStop(1, "#3b352b");
-      ctx.fillStyle = back;
-      ctx.fillRect(x + 1, y, s - 2, depth + 2);
-      // soft inner shadow down the left edge for roundness
-      const lsh = ctx.createLinearGradient(x, y, x + s * 0.3, y);
-      lsh.addColorStop(0, "rgba(0,0,0,0.5)");
-      lsh.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = lsh;
-      ctx.fillRect(x + 1, y, s * 0.3, s);
-      // cool accent along the lip you peer over
-      ctx.fillStyle = "rgba(130,180,220,0.16)";
-      ctx.fillRect(x + 1, y, s - 2, 2);
     }
 
-    // face
+    // Vertical riser on the south edge, drawn ONLY where this tile rises above
+    // the tile directly below it. Interior edges of a plateau draw no riser, so
+    // a raised region reads as one solid mass with a clean cast shadow — the way
+    // the original board looks.
+    const southE = nElev(c, r + 1);
+    if (ev > southE) {
+      const h = (ev - southE) * step;
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.65)";
+      ctx.shadowBlur = Math.max(4, h * 1.1);
+      ctx.shadowOffsetY = h * 0.7;
+      const wall = ctx.createLinearGradient(x, ty + s, x, ty + s + h);
+      wall.addColorStop(0, "#7a7064");
+      wall.addColorStop(0.45, "#473f35");
+      wall.addColorStop(1, "#181410");
+      ctx.fillStyle = wall;
+      ctx.fillRect(x, ty + s - 0.5, s, h + 1);
+      ctx.restore();
+      // seam groove per level + a warm rim catching light on the top lip
+      ctx.strokeStyle = "rgba(0,0,0,0.45)";
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= ev - southE - 1; i++) {
+        const yy = ty + s + i * step;
+        ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x + s, yy); ctx.stroke();
+      }
+      // bright sunlit lip along the very top of the wall
+      ctx.fillStyle = "rgba(255,224,170,0.5)";
+      ctx.fillRect(x, ty + s - 1.5, s, 2.5);
+    }
+
+    // top face
     const base = t.acidic ? [104, 122, 84] : [122, 116, 106];
     const g = ctx.createLinearGradient(x, ty, x, ty + s);
-    g.addColorStop(0, rgb(base, 1.10 * bright));
+    g.addColorStop(0, rgb(base, 1.16 * bright));
     g.addColorStop(0.5, rgb(base, 0.97 * bright));
-    g.addColorStop(1, rgb(base, 0.82 * bright));
+    g.addColorStop(1, rgb(base, 0.78 * bright));
     ctx.fillStyle = g;
     ctx.fillRect(x + 1, ty + 1, s - 2, s - 2);
 
-    // grunge + bevel
+    // grunge
     ctx.fillStyle = R.noise;
     ctx.fillRect(x + 1, ty + 1, s - 2, s - 2);
-    ctx.strokeStyle = "rgba(255,255,255," + (0.10 * bright) + ")";
+
+    // raised faces get a bevel: bright top-left edge, dark bottom-right
+    if (ev > 0) {
+      ctx.strokeStyle = "rgba(255,255,255,0.28)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, ty + s - 2); ctx.lineTo(x + 2, ty + 2); ctx.lineTo(x + s - 2, ty + 2);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath();
+      ctx.moveTo(x + s - 2, ty + 2); ctx.lineTo(x + s - 2, ty + s - 2); ctx.lineTo(x + 2, ty + s - 2);
+      ctx.stroke();
+    }
+
+    // tile seams
+    ctx.strokeStyle = "rgba(255,255,255," + (0.1 * bright) + ")";
     ctx.strokeRect(x + 1.5, ty + 1.5, s - 3, s - 3);
-    ctx.strokeStyle = "rgba(0,0,0,0.45)";
+    ctx.strokeStyle = "rgba(0,0,0,0.55)";
     ctx.strokeRect(x + 0.5, ty + 0.5, s - 1, s - 1);
 
     // etched dial emblem (gauge circle with a needle)
     const cx = x + s/2, cy = ty + s/2;
     ctx.save();
-    ctx.globalAlpha = 0.16;
+    ctx.globalAlpha = 0.15;
     ctx.strokeStyle = "#2c2a26";
     ctx.lineWidth = Math.max(1.5, s * 0.025);
-    ctx.beginPath();
-    ctx.arc(cx, cy, s * 0.28, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx - s * 0.34, cy + s * 0.34);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx, cy, s * 0.04, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, s * 0.28, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - s * 0.34, cy + s * 0.34); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, s * 0.04, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
 
-    // trench floors pool extra shadow
-    if (ev < 0) {
-      ctx.fillStyle = "rgba(0,0,0," + Math.min(0.5, -ev * 0.12) + ")";
-      ctx.fillRect(x + 1, ty + 1, s - 2, s - 2);
+    // Recess shading: darken the inner edges that sit BELOW a neighbour, so
+    // trenches and pits clearly read as sunken from every side.
+    const inset = s * 0.36;
+    const dirs = [[0, -1, "N"], [0, 1, "S"], [-1, 0, "W"], [1, 0, "E"]];
+    for (const [dc, dr, side] of dirs) {
+      const ne = nElev(c + dc, r + dr);
+      if (ne <= ev) continue;
+      const dark = Math.min(0.7, (ne - ev) * 0.42);
+      let gx;
+      if (side === "N") {
+        gx = ctx.createLinearGradient(x, ty, x, ty + inset);
+        gx.addColorStop(0, "rgba(0,0,0," + dark + ")"); gx.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = gx; ctx.fillRect(x + 1, ty + 1, s - 2, inset);
+      } else if (side === "S") {
+        gx = ctx.createLinearGradient(x, ty + s - inset, x, ty + s);
+        gx.addColorStop(0, "rgba(0,0,0,0)"); gx.addColorStop(1, "rgba(0,0,0," + dark + ")");
+        ctx.fillStyle = gx; ctx.fillRect(x + 1, ty + s - inset, s - 2, inset - 1);
+      } else if (side === "W") {
+        gx = ctx.createLinearGradient(x, ty, x + inset, ty);
+        gx.addColorStop(0, "rgba(0,0,0," + dark + ")"); gx.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = gx; ctx.fillRect(x + 1, ty + 1, inset, s - 2);
+      } else {
+        gx = ctx.createLinearGradient(x + s - inset, ty, x + s, ty);
+        gx.addColorStop(0, "rgba(0,0,0,0)"); gx.addColorStop(1, "rgba(0,0,0," + dark + ")");
+        ctx.fillStyle = gx; ctx.fillRect(x + s - inset, ty + 1, inset - 1, s - 2);
+      }
     }
 
     // acid shimmer
