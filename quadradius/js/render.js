@@ -486,20 +486,53 @@
     }
   }
 
-  // simple transient FX (expanding rings, debris)
-  function addFx(kind, c, r) {
+  const FX_DUR = { explosion: 650, capture: 650, power: 650, orb: 650, missile: 620 };
+
+  // transient FX; `delay` (ms) staggers the start (used for missile salvos)
+  function addFx(kind, c, r, delay) {
     const { x, y } = tileCenter(c, r);
-    R.anims.push({ kind, x, y, t0: performance.now() });
-    if (kind === "explosion") R.shakes = 14;
+    R.anims.push({ kind, x, y, t0: performance.now() + (delay || 0),
+                   dur: FX_DUR[kind] || 650, shook: false });
+    if (kind === "explosion" && !delay) R.shakes = 14;
   }
 
   function drawFx(now) {
-    R.anims = R.anims.filter(a => now - a.t0 < 650);
+    R.anims = R.anims.filter(a => now < a.t0 + a.dur);
     for (const a of R.anims) {
-      const k = (now - a.t0) / 650;
+      if (now < a.t0) continue;                 // not started yet (delayed)
+      const k = (now - a.t0) / a.dur;
       ctx.save();
+
+      if (a.kind === "missile") {
+        // a small warhead screaming down from off the top of the board
+        const ease = k * k;                     // accelerate as it falls
+        const startY = a.y - R.tileSize * 5;
+        const cy = startY + (a.y - startY) * ease;
+        // flame/smoke trail
+        const trail = ctx.createLinearGradient(a.x, cy - R.tileSize * 0.7, a.x, cy);
+        trail.addColorStop(0, "rgba(255,170,40,0)");
+        trail.addColorStop(1, "rgba(255,110,20,0.85)");
+        ctx.fillStyle = trail;
+        ctx.fillRect(a.x - R.tileSize * 0.035, cy - R.tileSize * 0.7, R.tileSize * 0.07, R.tileSize * 0.7);
+        // warhead
+        ctx.fillStyle = "#33323a";
+        ctx.beginPath();
+        ctx.moveTo(a.x, cy + R.tileSize * 0.13);
+        ctx.lineTo(a.x - R.tileSize * 0.05, cy - R.tileSize * 0.09);
+        ctx.lineTo(a.x + R.tileSize * 0.05, cy - R.tileSize * 0.09);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "#e6553a";
+        ctx.beginPath();
+        ctx.arc(a.x, cy + R.tileSize * 0.13, R.tileSize * 0.028, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        continue;
+      }
+
       ctx.globalAlpha = 1 - k;
       if (a.kind === "explosion" || a.kind === "capture") {
+        if (a.kind === "explosion" && !a.shook) { R.shakes = 12; a.shook = true; }
         ctx.strokeStyle = a.kind === "explosion" ? "#ffb347" : "#fff";
         ctx.lineWidth = 4 * (1 - k) + 1;
         ctx.beginPath();

@@ -204,9 +204,21 @@
         case "orbDrop":
           Render.addFx("orb", ev.at[0], ev.at[1]);
           break;
+        case "missile": {
+          // staggered warhead: falls, then craters/explodes on impact
+          const delay = (ev.order || 0) * 150;
+          const impact = delay + 560;
+          Render.addFx("missile", ev.at[0], ev.at[1], delay);
+          Render.addFx("explosion", ev.at[0], ev.at[1], impact);
+          setTimeout(() => sfx.boom(), impact);
+          break;
+        }
         case "pieceDestroyed":
-          sfx.boom();
-          Render.addFx("explosion", ev.at[0], ev.at[1]);
+          // smart-bomb kills are voiced by their own missile FX
+          if (ev.reason !== "bomb") {
+            sfx.boom();
+            Render.addFx("explosion", ev.at[0], ev.at[1]);
+          }
           break;
         case "tileDestroyed":
           Render.addFx("explosion", ev.at[0], ev.at[1]);

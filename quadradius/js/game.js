@@ -303,6 +303,21 @@
       if (dropped) this.log(dropped + " Power Orb" + (dropped > 1 ? "s" : "") + " spawned.");
     }
 
+    // one Smart Bomb warhead landing on (c,r); `order` staggers its animation
+    smartBombHit(c, r, order) {
+      this.emit("missile", { at: [c, r], order: order || 0 });
+      const occ = this.pieceAt(c, r);
+      if (occ) {
+        // filtered to enemies only by the caller
+        this.destroyPiece(occ, "bomb");
+        this.log("A missile destroyed one of " + this.names[occ.owner] + "'s pieces!");
+      } else {
+        const t = this.tile(c, r);
+        if (t.orb) t.orb = false;
+        this.changeElev(c, r, -1);
+      }
+    }
+
     makeAcidic(c, r) {
       const t = this.tile(c, r);
       if (t.hole) return;
@@ -320,10 +335,13 @@
 
     /* ---------------- destruction ---------------- */
 
-    destroyPiece(piece, _reason) {
+    destroyPiece(piece, reason) {
       if (!piece.alive) return;
       piece.alive = false;
-      this.emit("pieceDestroyed", { piece: piece.id, at: [piece.col, piece.row], owner: piece.owner });
+      this.emit("pieceDestroyed", {
+        piece: piece.id, at: [piece.col, piece.row], owner: piece.owner,
+        reason: reason || null,
+      });
     }
 
     destroyTile(c, r) {

@@ -288,20 +288,26 @@
     {
       key: "smart_bomb",
       name: "SMART BOMB",
-      desc: "Launches a cluster strike that blasts four random tiles into " +
-            "bottomless holes, destroying any piece standing on them. The " +
-            "launching piece is never hit.",
+      desc: "Calls in a missile barrage from above. Five warheads rain down on " +
+            "random targets: any that land on an enemy piece destroy it, while " +
+            "those that hit open ground crater the tile a level lower and vaporize " +
+            "any Power Orb there. Your own pieces and the launcher are never hit.",
       apply(G, piece) {
+        // never target the launcher or any friendly piece
         const spots = [];
         for (let c = 0; c < G.COLS; c++)
           for (let r = 0; r < G.ROWS; r++) {
             if (c === piece.col && r === piece.row) continue;
-            if (!G.tile(c, r).hole) spots.push([c, r]);
+            if (G.tile(c, r).hole) continue;
+            const occ = G.pieceAt(c, r);
+            if (occ && occ.owner === piece.owner) continue;
+            spots.push([c, r]);
           }
-        for (let i = 0; i < 4 && spots.length; i++) {
+        const n = Math.min(5, spots.length);
+        for (let i = 0; i < n; i++) {
           const idx = (Math.random() * spots.length) | 0;
           const [c, r] = spots.splice(idx, 1)[0];
-          G.destroyTile(c, r);
+          G.smartBombHit(c, r, i);
         }
       },
     },
