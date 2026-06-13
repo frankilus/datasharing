@@ -20,15 +20,31 @@
     { id: "radial", label: "RADIAL" },
   ];
 
+  // GROW QUADRADIUS widens a player's power reach: each stack adds one extra
+  // row/column band on either side, and one extra ring to a radial.
+  function rangeBonus(G, piece) {
+    return (G.rangeBonus && G.rangeBonus[piece.owner]) || 0;
+  }
+
   function scopeTiles(G, piece, scope) {
     const out = [];
+    const b = rangeBonus(G, piece);
     if (scope === "row") {
-      for (let c = 0; c < G.COLS; c++) out.push([c, piece.row]);
+      for (let dr = -b; dr <= b; dr++) {
+        const rr = piece.row + dr;
+        if (rr < 0 || rr >= G.ROWS) continue;
+        for (let c = 0; c < G.COLS; c++) out.push([c, rr]);
+      }
     } else if (scope === "col") {
-      for (let r = 0; r < G.ROWS; r++) out.push([piece.col, r]);
+      for (let dc = -b; dc <= b; dc++) {
+        const cc = piece.col + dc;
+        if (cc < 0 || cc >= G.COLS) continue;
+        for (let r = 0; r < G.ROWS; r++) out.push([cc, r]);
+      }
     } else if (scope === "radial") {
-      for (let dc = -1; dc <= 1; dc++)
-        for (let dr = -1; dr <= 1; dr++) {
+      const rad = 1 + b;
+      for (let dc = -rad; dc <= rad; dc++)
+        for (let dr = -rad; dr <= rad; dr++) {
           const c = piece.col + dc, r = piece.row + dr;
           if (c >= 0 && c < G.COLS && r >= 0 && r < G.ROWS) out.push([c, r]);
         }
@@ -314,16 +330,17 @@
     {
       key: "kamikaze",
       name: "KAMIKAZE",
-      desc: "This piece self-destructs in a massive blast, destroying every " +
-            "piece — friend or foe — on the eight tiles around it and scorching " +
-            "the ground a level lower.",
+      desc: "This piece self-destructs in a massive blast, destroying EVERY " +
+            "piece in range — friend, foe and the bomber itself — and scorching " +
+            "the ground a level lower. Its blast radius grows with GROW QUADRADIUS.",
       apply(G, piece) {
-        for (let dc = -1; dc <= 1; dc++)
-          for (let dr = -1; dr <= 1; dr++) {
+        const rad = 1 + ((G.rangeBonus && G.rangeBonus[piece.owner]) || 0);
+        for (let dc = -rad; dc <= rad; dc++)
+          for (let dr = -rad; dr <= rad; dr++) {
             const c = piece.col + dc, r = piece.row + dr;
             if (c < 0 || c >= G.COLS || r < 0 || r >= G.ROWS) continue;
             const p = G.pieceAt(c, r);
-            if (p) G.destroyPiece(p);
+            if (p) G.destroyPiece(p, "kamikaze");   // friend, foe, and the caster
             G.changeElev(c, r, -1);
           }
       },
@@ -339,9 +356,11 @@
     {
       key: "grow_quadradius",
       name: "GROW QUADRADIUS",
-      desc: "Overclocks the orb dispensers permanently. Every future Power Orb " +
-            "drop delivers one additional orb to the battlefield.",
-      apply(G) { G.orbAmountBonus++; },
+      desc: "Permanently widens the reach of all your scoped powers by one. " +
+            "Row and Column powers gain an extra band on either side, and " +
+            "Radial powers gain an extra ring (3x3 becomes 5x5). Stacks with " +
+            "every copy you use.",
+      apply(G, piece) { G.rangeBonus[piece.owner]++; },
     },
     {
       key: "switcheroo",

@@ -51,6 +51,9 @@
       this.winner = null;
       this.resigned = null;
 
+      // GROW QUADRADIUS range bonus, per player
+      this.rangeBonus = [0, 0];
+
       // orb spawn schedule
       this.orbRoundsLeft = 3;     // rounds until next drop
       this.orbInterval = 5;
