@@ -193,11 +193,26 @@
       this.emit("power", { piece: piece.id, key, at: [piece.col, piece.row], scope: def.scope });
       def.apply(this, piece, target);
 
-      this.afterAction(piece, key);
+      this.afterPower(piece);
       return true;
     }
 
     /* ---------------- per-turn bookkeeping ---------------- */
+
+    // a power does NOT end the turn — only moving a piece does. A power can
+    // still win or lose the game outright (kamikaze, smart bomb), and it can
+    // leave the active player with no way to move (stalemate).
+    afterPower(piece) {
+      if (piece.alive) this.resolveLanding(piece);   // e.g. teleport onto an orb
+
+      this.checkVictory();
+      if (this.winner === null && !this.hasAnyAction(this.turn)) {
+        this.log(this.names[this.turn] + " has no possible moves.");
+        this.winner = 1 - this.turn;
+        this.emit("gameover", { winner: this.winner, reason: "stalemate" });
+      }
+      this.emit("afterPower", { turn: this.turn });
+    }
 
     afterAction(piece, usedPowerKey) {
       // landing effects (also applies after teleports/relocates)

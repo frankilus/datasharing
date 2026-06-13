@@ -139,47 +139,47 @@
     return n;
   }
 
-  // choose and execute one action for player `owner`
-  function takeTurn(G, owner) {
-    let bestMove = null, bestMoveScore = -Infinity, bestMoveUrgent = false;
-    for (const piece of G.livePieces(owner)) {
+  function bestMoveFor(G, owner) {
+    let best = null, bestS = -Infinity;
+    for (const piece of G.livePieces(owner))
       for (const [c, r] of G.legalMoves(piece)) {
         const s = scoreMove(G, piece, c, r);
-        if (s > bestMoveScore) {
-          bestMoveScore = s;
-          bestMove = { piece, c, r };
-          bestMoveUrgent = !!G.pieceAt(c, r) || G.tile(c, r).orb;
-        }
+        if (s > bestS) { bestS = s; best = { piece, c, r, score: s }; }
       }
-    }
+    return best;
+  }
 
-    let bestPow = null, bestPowScore = -Infinity;
+  function bestPowerFor(G, owner) {
+    let best = null, bestS = -Infinity;
     for (const piece of G.livePieces(owner)) {
       if (piece.inhibited > 0) continue;
       piece.powers.forEach((key, idx) => {
         const def = POWERS[key];
-        if (def.targeted) return;
+        if (def.targeted) return;                    // AI can't pick a target
         if (def.canUse && !def.canUse(G, piece)) return;
         const s = scorePower(G, piece, key) + Math.random() * 0.5;
-        if (s > bestPowScore) { bestPowScore = s; bestPow = { piece, idx }; }
+        if (s > bestS) { bestS = s; best = { piece, idx, score: s }; }
       });
     }
+    return best;
+  }
 
-    // captures and orb grabs come first; otherwise spend a decent power
-    // rather than hoarding forever
-    if (bestMove && bestMoveUrgent) {
-      return G.doMove(bestMove.piece, bestMove.c, bestMove.r);
+  // Plays a full turn for `owner`: spend any worthwhile powers, then make the
+  // one move that actually ends the turn. (Powers no longer end the turn.)
+  function takeTurn(G, owner) {
+    for (let i = 0; i < 12 && G.winner === null; i++) {
+      const move = bestMoveFor(G, owner);
+      const pow = bestPowerFor(G, owner);
+      // use a power if it's clearly worth a slot, or if we have no move yet and
+      // a power might free one up; otherwise commit to the move
+      if (pow && (pow.score >= 6 || !move)) {
+        G.doPower(pow.piece, pow.idx);
+        continue;
+      }
+      if (move) return G.doMove(move.piece, move.c, move.r);
+      return false;   // no move and no usable power (engine handles stalemate)
     }
-    if (bestPow && bestPowScore >= 6) {
-      return G.doPower(bestPow.piece, bestPow.idx);
-    }
-    if (bestMove) {
-      return G.doMove(bestMove.piece, bestMove.c, bestMove.r);
-    }
-    if (bestPow) {
-      return G.doPower(bestPow.piece, bestPow.idx);
-    }
-    return false;
+    return G.winner !== null;
   }
 
   const TAUNTS = [

@@ -274,12 +274,29 @@
       $("ledFooter").textContent = "click a destination tile...";
       return;
     }
+    const usedPiece = piece;
     if (G.doPower(piece, idx)) {
-      clearSelection();
       pumpEvents();
-      endHumanTurn();
+      if (G.winner === null) continueAfterPower(usedPiece);
     } else {
       sfx.denied();
+    }
+  }
+
+  // A power doesn't end the turn — the player must still move. Keep them in
+  // control: re-select the casting piece (refreshing its now-changed inventory
+  // and legal moves) so they can fire more powers or finally move.
+  function continueAfterPower(piece) {
+    UI.armedPower = null;
+    Render.state.targeting = false;
+    Render.state.targetTiles = [];
+    if (piece && piece.alive && piece.owner === UI.G.turn) {
+      selectPiece(piece);
+      $("ledFooter").textContent = "power used — you still have your move";
+    } else {
+      clearSelection();
+      ledShow("YOUR TURN", "Power used. Select a piece and make a move to end " +
+              "your turn.", "");
     }
   }
 
@@ -304,13 +321,14 @@
 
     // targeted power destination?
     if (UI.selectedPiece && UI.armedPower !== null) {
-      if (G.doPower(UI.selectedPiece, UI.armedPower, [c, r])) {
-        clearSelection();
+      const usedPiece = UI.selectedPiece;
+      if (G.doPower(usedPiece, UI.armedPower, [c, r])) {
         pumpEvents();
-        endHumanTurn();
+        if (G.winner === null) continueAfterPower(usedPiece);
       } else {
+        // invalid target: cancel targeting but keep the piece selected
         sfx.denied();
-        clearSelection();
+        if (usedPiece.alive) selectPiece(usedPiece); else clearSelection();
       }
       return;
     }
