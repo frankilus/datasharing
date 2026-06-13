@@ -190,6 +190,11 @@
           sfx.power();
           Render.addFx("power", ev.at[0], ev.at[1]);
           break;
+        case "divide":
+          sfx.orb();
+          Render.animateDivide(ev.child, ev.from, ev.to);
+          Render.addFx("power", ev.to[0], ev.to[1]);
+          break;
         case "orbPickup":
           sfx.orb();
           // only reveal the power to the collector (vs CPU: only human)

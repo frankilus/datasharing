@@ -94,12 +94,9 @@
             "of every round and eventually dissolve into bottomless holes that " +
             "destroy anything standing on them. Cannot be activated unless an " +
             "enemy piece is in range.",
-      needsEnemies: true,
+      needsTargets: (G, piece, tiles) => enemiesIn(G, piece, null, tiles).length > 0,
       apply(G, piece, _t, tiles) {
-        for (const p of enemiesIn(G, piece, null, tiles)) {
-          const t = G.tile(p.col, p.row);
-          if (!t.hole) t.acidic = true;
-        }
+        for (const p of enemiesIn(G, piece, null, tiles)) G.makeAcidic(p.col, p.row);
       },
     },
     {
@@ -108,20 +105,20 @@
       desc: "Straps a proximity mine to every enemy piece in range. The moment " +
             "a mined piece moves, the mine detonates and destroys it. Mined " +
             "pieces can still activate powers — and PURIFY can defuse the mine.",
+      needsTargets: (G, piece, tiles) => enemiesIn(G, piece, null, tiles).length > 0,
       apply(G, piece, _t, tiles) {
         for (const p of enemiesIn(G, piece, null, tiles)) p.mined = true;
       },
-      useEnemies: true,
     },
     {
       key: "inhibit",
       name: "INHIBIT",
       desc: "Jams the power systems of every enemy piece in range. Inhibited " +
             "pieces cannot activate any powers for their next three turns.",
+      needsTargets: (G, piece, tiles) => enemiesIn(G, piece, null, tiles).length > 0,
       apply(G, piece, _t, tiles) {
         for (const p of enemiesIn(G, piece, null, tiles)) p.inhibited = 3;
       },
-      useEnemies: true,
     },
     {
       key: "spyware",
@@ -130,10 +127,10 @@
             "surrounding you. You can then view their power inventory. Useful " +
             "for keeping tabs on what new powers they collect and predicting " +
             "their plans.",
+      needsTargets: (G, piece, tiles) => enemiesIn(G, piece, null, tiles).length > 0,
       apply(G, piece, _t, tiles) {
         for (const p of enemiesIn(G, piece, null, tiles)) p.buggedBy[piece.owner] = true;
       },
-      useEnemies: true,
     },
     {
       key: "purify",
@@ -141,6 +138,7 @@
       desc: "Releases a cleansing burst that strips every enemy piece in range " +
             "of all stored powers, bugs and enhancements, returning them to " +
             "plain foot soldiers.",
+      needsTargets: (G, piece, tiles) => enemiesIn(G, piece, null, tiles).length > 0,
       apply(G, piece, _t, tiles) {
         for (const p of enemiesIn(G, piece, null, tiles)) {
           p.powers = [];
@@ -151,40 +149,50 @@
           p.jumpProof = 0;
         }
       },
-      useEnemies: true,
     },
     {
       key: "learn",
       name: "LEARN",
-      desc: "Scans every enemy piece in range and copies all of their stored " +
-            "powers into this piece's own inventory. The enemy keeps theirs — " +
-            "but now you have them too.",
+      desc: "Scans every other piece in range — friend and foe — and copies all " +
+            "of their stored powers into this piece's own inventory. The other " +
+            "pieces keep theirs; this piece simply inherits a copy of everything.",
+      // only fires if some other piece in range is actually carrying a power
+      needsTargets: (G, piece, tiles) => tiles.some(([c, r]) => {
+        const p = G.pieceAt(c, r);
+        return p && p !== piece && p.powers.length > 0;
+      }),
       apply(G, piece, _t, tiles) {
-        for (const p of enemiesIn(G, piece, null, tiles))
-          for (const k of p.powers) piece.powers.push(k);
+        for (const [c, r] of tiles) {
+          const p = G.pieceAt(c, r);
+          if (p && p !== piece)
+            for (const k of p.powers) piece.powers.push(k);
+        }
       },
-      useEnemies: true,
     },
     {
       key: "bankrupt",
       name: "BANKRUPT",
-      desc: "Emits a destructive pulse that wipes out every power stored by " +
-            "enemy pieces in range. Their inventories are emptied for good.",
+      desc: "Triggers a market crash across the line: every unclaimed Power Orb " +
+            "in range is wiped off the board, and every power stored by enemy " +
+            "pieces in range is destroyed. Nobody profits here.",
       apply(G, piece, _t, tiles) {
+        for (const [c, r] of tiles) {
+          const t = G.tile(c, r);
+          if (t.orb) t.orb = false;
+        }
         for (const p of enemiesIn(G, piece, null, tiles)) p.powers = [];
       },
-      useEnemies: true,
     },
     {
       key: "wall",
       name: "WALL",
-      desc: "Erects a towering barricade across the entire line: every tile in " +
-            "range is raised three levels, and every piece standing on it rides " +
-            "up onto the wall.",
+      desc: "Erects a barricade across the entire line: every tile in range is " +
+            "raised to maximum height, and every piece standing on it rides up " +
+            "onto the wall.",
       apply(G, _piece, _t, tiles) {
         for (const [c, r] of tiles) {
           const t = G.tile(c, r);
-          if (!t.hole) G.setElev(c, r, 3);
+          if (!t.hole) G.setElev(c, r, G.MAX_ELEV);
         }
       },
     },
@@ -203,15 +211,30 @@
     {
       key: "multiply",
       name: "MULTIPLY",
-      desc: "This piece divides itself, spawning a fresh (power-less) copy of " +
-            "itself on every empty tile directly beside it.",
-      apply(G, piece) {
-        for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      desc: "This piece divides like a living cell, spawning a fresh " +
+            "(power-less) copy of itself on an adjacent empty tile of your " +
+            "choosing. After activating, click where the new piece should grow.",
+      targeted: true,
+      canUse(G, piece) {
+        return [[1,0],[-1,0],[0,1],[0,-1]].some(([dc, dr]) => {
           const c = piece.col + dc, r = piece.row + dr;
-          if (c < 0 || c >= G.COLS || r < 0 || r >= G.ROWS) continue;
+          if (c < 0 || c >= G.COLS || r < 0 || r >= G.ROWS) return false;
           const t = G.tile(c, r);
-          if (!t.hole && !G.pieceAt(c, r) && !t.orb) G.spawnPiece(piece.owner, c, r);
-        }
+          return !t.hole && !G.pieceAt(c, r) && !t.orb;
+        });
+      },
+      validTarget(G, piece, c, r) {
+        const adj = Math.abs(c - piece.col) + Math.abs(r - piece.row) === 1;
+        if (!adj) return false;
+        const t = G.tile(c, r);
+        return !t.hole && !G.pieceAt(c, r) && !t.orb;
+      },
+      apply(G, piece, target) {
+        const child = G.spawnPiece(piece.owner, target[0], target[1]);
+        // match the parent's tile so the offspring isn't stranded at ground level
+        G.setElev(child.col, child.row, G.tile(piece.col, piece.row).elev);
+        G.emit("divide", { parent: piece.id, child: child.id,
+                           from: [piece.col, piece.row], to: target });
       },
     },
     {
@@ -351,10 +374,10 @@
         desc: tpl.desc,
         scope: sc.id,
         targeted: false,
-        // powers that need enemy targets can't fire (or be wasted) without one
-        canUse: tpl.needsEnemies
+        // powers that need targets in range can't fire (or be wasted) without one
+        canUse: tpl.needsTargets
           ? (G, piece) =>
-              enemiesIn(G, piece, null, scopeTiles(G, piece, sc.id)).length > 0
+              tpl.needsTargets(G, piece, scopeTiles(G, piece, sc.id))
           : (tpl.canUse || null),
         apply(G, piece, target) {
           const tiles = scopeTiles(G, piece, sc.id);

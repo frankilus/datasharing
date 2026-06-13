@@ -10,12 +10,15 @@
   const { POWERS, randomPowerKey } = window.QPOWERS;
 
   const COLS = 10, ROWS = 8;
-  const MIN_ELEV = -4, MAX_ELEV = 4;
+  const MIN_ELEV = -1, MAX_ELEV = 2;
+  const ACID_ROUNDS = 3;   // rounds an acidic tile survives before dissolving
 
   class Game {
     constructor(names) {
       this.COLS = COLS;
       this.ROWS = ROWS;
+      this.MIN_ELEV = MIN_ELEV;
+      this.MAX_ELEV = MAX_ELEV;
       this.names = names || ["you", "turbo"];
 
       // tiles
@@ -27,6 +30,7 @@
             elev: 0,
             hole: false,
             acidic: false,
+            acidLife: 0,
             orb: false,
           };
         }
@@ -241,13 +245,14 @@
         if (p.alive && p.jumpProof > 0) p.jumpProof--;
       }
 
-      // acid corrosion
+      // acid corrosion: each acidic tile sinks and counts down to a hole
       for (let c = 0; c < COLS; c++)
         for (let r = 0; r < ROWS; r++) {
           const t = this.tile(c, r);
           if (!t.acidic || t.hole) continue;
-          t.elev--;
-          if (t.elev <= MIN_ELEV) this.destroyTile(c, r);
+          if (t.elev > MIN_ELEV) this.setElev(c, r, t.elev - 1);
+          t.acidLife--;
+          if (t.acidLife <= 0) this.destroyTile(c, r);
         }
 
       // orb spawning
@@ -283,6 +288,13 @@
       if (dropped) this.log(dropped + " Power Orb" + (dropped > 1 ? "s" : "") + " spawned.");
     }
 
+    makeAcidic(c, r) {
+      const t = this.tile(c, r);
+      if (t.hole) return;
+      t.acidic = true;
+      t.acidLife = ACID_ROUNDS;
+    }
+
     rehashOrbs() {
       let count = 0;
       for (let c = 0; c < COLS; c++)
@@ -305,6 +317,7 @@
       t.hole = true;
       t.orb = false;
       t.acidic = false;
+      t.acidLife = 0;
       t.elev = 0;
       const p = this.pieceAt(c, r);
       if (p) {

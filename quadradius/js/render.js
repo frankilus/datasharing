@@ -48,7 +48,7 @@
   }
   window.addEventListener("resize", resize);
 
-  const ELEV_LIFT = 0.10;   // px offset per elevation level, in tile sizes
+  const ELEV_LIFT = 0.14;   // px offset per elevation level, in tile sizes
 
   function visElev(t) {
     if (t.hole) return 0;
@@ -117,43 +117,60 @@
     const ev = visElev(t);
     const lift = ev * s * ELEV_LIFT;         // vertical offset for elevation
     const ty = y - lift;
-    const bright = 1 + ev * 0.10;            // higher = brighter
+    const bright = 1 + ev * 0.08;            // higher = brighter
+    const px3d = s * 0.06 * Math.max(0, ev); // slight rightward skew for raised slabs
 
     if (lift > 0.5) {
-      // raised platform: extruded side wall with seam lines per level
-      const wall = ctx.createLinearGradient(x, ty + s, x, ty + s + lift);
-      wall.addColorStop(0, "#776d5f");
-      wall.addColorStop(1, "#39342c");
-      ctx.fillStyle = wall;
-      ctx.fillRect(x + 1, ty + s - 2, s - 2, lift + 2);
+      // raised slab: soft contact shadow + extruded front & right side walls
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.55)";
+      ctx.shadowBlur = lift * 1.6;
+      ctx.shadowOffsetY = lift * 0.55;
+      ctx.fillStyle = "rgba(0,0,0,0.30)";
+      ctx.fillRect(x + 3, y + 3, s - 6, s - 6);
+      ctx.restore();
+
+      // front wall (slab thickness)
+      const front = ctx.createLinearGradient(x, ty + s - lift, x, ty + s);
+      front.addColorStop(0, "#736a5d");
+      front.addColorStop(1, "#2f2b24");
+      ctx.fillStyle = front;
+      ctx.fillRect(x + 1, ty + s - 1, s - 2, lift + 2);
+      // right wall, catching a touch of warm rim light
+      const right = ctx.createLinearGradient(x + s - 2, ty, x + s - 2 + px3d, ty);
+      right.addColorStop(0, "#5d544868");
+      right.addColorStop(1, "#3a352c");
+      if (px3d > 0.5) { ctx.fillStyle = right; ctx.fillRect(x + s - 2, ty + 1, px3d, s + lift); }
+      // per-level seam grooves on the front wall
       ctx.strokeStyle = "rgba(0,0,0,0.4)";
       ctx.lineWidth = 1;
-      for (let i = 1; i <= Math.floor(ev); i++) {
-        const yy = ty + s - 2 + (i / ev) * lift;
-        ctx.beginPath();
-        ctx.moveTo(x + 2, yy);
-        ctx.lineTo(x + s - 2, yy);
-        ctx.stroke();
+      for (let i = 1; i < ev; i++) {
+        const yy = ty + s - 1 + (i / ev) * lift;
+        ctx.beginPath(); ctx.moveTo(x + 2, yy); ctx.lineTo(x + s - 2, yy); ctx.stroke();
       }
+      // warm accent along the top lip
+      ctx.fillStyle = "rgba(255,212,150,0.22)";
+      ctx.fillRect(x + 1, ty + s - 1, s - 2, 2);
     } else if (lift < -0.5) {
-      // trench: dark cavity with a visible upper wall above the sunken floor
-      ctx.fillStyle = "#0d0c0a";
+      // trench: looking down into a recessed pit with shaded inner walls
+      const depth = -lift;
+      ctx.fillStyle = "#15120d";
       ctx.fillRect(x, y, s, s);
-      const wallH = -lift;
-      const wall = ctx.createLinearGradient(x, y, x, y + wallH);
-      wall.addColorStop(0, "#211d18");
-      wall.addColorStop(1, "#453e34");
-      ctx.fillStyle = wall;
-      ctx.fillRect(x + 1, y, s - 2, wallH);
-      ctx.strokeStyle = "rgba(0,0,0,0.45)";
-      ctx.lineWidth = 1;
-      for (let i = 1; i <= Math.floor(-ev); i++) {
-        const yy = y + (i / -ev) * wallH;
-        ctx.beginPath();
-        ctx.moveTo(x + 2, yy);
-        ctx.lineTo(x + s - 2, yy);
-        ctx.stroke();
-      }
+      // upper/back inner wall, lighter toward the sunken floor
+      const back = ctx.createLinearGradient(x, y, x, y + depth);
+      back.addColorStop(0, "#0c0a07");
+      back.addColorStop(1, "#3b352b");
+      ctx.fillStyle = back;
+      ctx.fillRect(x + 1, y, s - 2, depth + 2);
+      // soft inner shadow down the left edge for roundness
+      const lsh = ctx.createLinearGradient(x, y, x + s * 0.3, y);
+      lsh.addColorStop(0, "rgba(0,0,0,0.5)");
+      lsh.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = lsh;
+      ctx.fillRect(x + 1, y, s * 0.3, s);
+      // cool accent along the lip you peer over
+      ctx.fillStyle = "rgba(130,180,220,0.16)";
+      ctx.fillRect(x + 1, y, s - 2, 2);
     }
 
     // face
@@ -201,13 +218,6 @@
     if (t.acidic) {
       ctx.fillStyle = "rgba(120,200,60," + (0.10 + 0.06 * Math.sin(R.time / 300 + c + r)) + ")";
       ctx.fillRect(x + 1, ty + 1, s - 2, s - 2);
-    }
-
-    // elevation badge so levels read at a glance
-    if (t.elev !== 0) {
-      ctx.font = "bold " + Math.round(s * 0.17) + "px 'Courier New', monospace";
-      ctx.fillStyle = t.elev > 0 ? "rgba(255,255,255,0.45)" : "rgba(255,196,110,0.55)";
-      ctx.fillText((t.elev > 0 ? "+" : "") + t.elev, x + s * 0.07, ty + s * 0.22);
     }
 
     // power orb
@@ -272,24 +282,6 @@
     ctx.arc(px, py, ringR, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
-
-    // jump-proof hazard banding
-    if (p.jumpProof) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(px, py, ringR, 0, Math.PI * 2);
-      ctx.arc(px, py, ringR * 0.68, 0, Math.PI * 2, true);
-      ctx.clip("evenodd");
-      for (let a = 0; a < 12; a++) {
-        ctx.fillStyle = a % 2 ? "#d8b62c" : "#2a2722";
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.arc(px, py, ringR, (a/12) * Math.PI*2, ((a+1)/12) * Math.PI*2);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.restore();
-    }
 
     // shutter segment lines
     ctx.strokeStyle = "rgba(60,55,46,0.55)";
@@ -366,21 +358,82 @@
       ctx.fill();
     }
 
-    // climbing gear — small hook glyph
-    if (p.climb) {
-      ctx.strokeStyle = "rgba(40,36,30,0.85)";
-      ctx.lineWidth = Math.max(1, s * 0.02);
-      ctx.beginPath();
-      ctx.arc(px - ringR*0.72, py - ringR*0.3, s*0.05, Math.PI*0.2, Math.PI*1.4);
-      ctx.stroke();
-    }
-
     // inhibited — flickering jam static
     if (p.inhibited > 0) {
       ctx.fillStyle = "rgba(255,60,30," + (0.18 + 0.12*Math.sin(R.time/90)) + ")";
       ctx.beginPath();
       ctx.arc(px, py, ringR, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // climb — spinning propeller mounted on a hub above the piece
+    if (p.climb) {
+      const spin = R.time / 60;
+      const hubY = py - ringR * 0.92;
+      // support mast
+      ctx.strokeStyle = "rgba(40,36,30,0.8)";
+      ctx.lineWidth = Math.max(1.5, s * 0.025);
+      ctx.beginPath();
+      ctx.moveTo(px, py - ringR * 0.55);
+      ctx.lineTo(px, hubY);
+      ctx.stroke();
+      // motion blur disc
+      ctx.fillStyle = "rgba(150,170,190,0.18)";
+      ctx.beginPath();
+      ctx.ellipse(px, hubY, ringR * 0.95, ringR * 0.22, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // two blades, foreshortened by the spin angle so they look like they turn
+      for (const off of [0, Math.PI]) {
+        const a = spin + off;
+        const bx = Math.cos(a) * ringR * 0.95;
+        const grad = ctx.createLinearGradient(px - bx, hubY, px + bx, hubY);
+        grad.addColorStop(0, "#9aa6b2");
+        grad.addColorStop(0.5, "#e8eef4");
+        grad.addColorStop(1, "#6c7884");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(px, hubY, Math.abs(bx), ringR * 0.12, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // hub cap
+      ctx.fillStyle = "#3a3630";
+      ctx.beginPath();
+      ctx.arc(px, hubY, s * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.beginPath();
+      ctx.arc(px - s*0.012, hubY - s*0.012, s * 0.015, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // jump-proof — translucent energy force field bubble over the piece
+    if (p.jumpProof > 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(R.time / 220);
+      const fieldR = ringR * 1.28;
+      ctx.save();
+      const fg = ctx.createRadialGradient(px - fieldR*0.3, py - fieldR*0.35, fieldR*0.1,
+                                          px, py, fieldR);
+      fg.addColorStop(0, "rgba(150,225,255,0.05)");
+      fg.addColorStop(0.7, "rgba(120,200,255," + (0.10 + 0.06*pulse) + ")");
+      fg.addColorStop(0.92, "rgba(160,235,255," + (0.32 + 0.18*pulse) + ")");
+      fg.addColorStop(1, "rgba(90,170,235,0.06)");
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(px, py, fieldR, 0, Math.PI * 2);
+      ctx.fill();
+      // crackling hex shimmer ring
+      ctx.strokeStyle = "rgba(180,240,255," + (0.45 + 0.3*pulse) + ")";
+      ctx.lineWidth = Math.max(1.5, s * 0.02);
+      ctx.beginPath();
+      ctx.arc(px, py, fieldR, 0, Math.PI * 2);
+      ctx.stroke();
+      // bright specular highlight on the dome
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = Math.max(1, s * 0.012);
+      ctx.beginPath();
+      ctx.arc(px, py, fieldR * 0.97, Math.PI * 1.15, Math.PI * 1.6);
+      ctx.stroke();
+      ctx.restore();
     }
 
     // power count pips
@@ -395,6 +448,24 @@
       }
     }
 
+    ctx.restore();
+  }
+
+  // gooey membrane connecting a dividing cell back to its parent
+  function drawDivideNeck(p, pos) {
+    if (!pos.parent) return;
+    const col = PLAYER_COLORS[p.owner];
+    const w = R.tileSize * 0.22 * pos.pinch;
+    if (w < 1) return;
+    const mx = (pos.x + pos.parent.x) / 2, my = (pos.y + pos.parent.y) / 2;
+    ctx.save();
+    ctx.fillStyle = col.core;
+    ctx.globalAlpha = 0.55 * pos.pinch;
+    ctx.beginPath();
+    ctx.ellipse(mx, my,
+      Math.hypot(pos.x - pos.parent.x, pos.y - pos.parent.y) / 2 + w, w,
+      Math.atan2(pos.y - pos.parent.y, pos.x - pos.parent.x), 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -470,6 +541,15 @@
     };
   }
 
+  // cell-division animation: the offspring buds out of the parent tile,
+  // stretching across like a dividing cell before settling on its tile.
+  function animateDivide(childId, from, to) {
+    R.pieceAnims[childId] = {
+      fc: from[0], fr: from[1], tc: to[0], tr: to[1],
+      t0: performance.now(), dur: 620, divide: true,
+    };
+  }
+
   function animatedPos(p) {
     const a = R.pieceAnims[p.id];
     if (!a) return null;
@@ -478,13 +558,18 @@
     const e = k < 0.5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2) / 2;  // ease in-out
     const f = tileCenter(a.fc, a.fr), t = tileCenter(a.tc, a.tr);
     const pos = { x: f.x + (t.x - f.x) * e, y: f.y + (t.y - f.y) * e,
-                  scale: 1, floating: false, groundY: 0 };
+                  scale: 1, floating: false, groundY: 0, pinch: 0 };
     if (a.float) {
       const arc = Math.sin(Math.PI * e);   // 0 -> 1 -> 0 over the flight
       pos.floating = true;
       pos.groundY = pos.y;
       pos.y -= arc * R.tileSize * 0.6;     // lift off the board
       pos.scale = 1 + arc * 0.22;          // closer to the camera
+    } else if (a.divide) {
+      // grows from a small bud, with a membrane "neck" back to the parent
+      pos.scale = 0.35 + 0.65 * e;
+      pos.pinch = 1 - e;                    // 1 = fully joined, 0 = separated
+      pos.parent = f;
     }
     return pos;
   }
@@ -531,8 +616,9 @@
     const airborne = [];
     for (const p of ps) {
       const pos = animatedPos(p) || tileCenter(p.col, p.row);
-      if (pos.floating) airborne.push([p, pos]);
-      else drawPiece(p, pos.x, pos.y, pos.scale || 1);
+      if (pos.floating) { airborne.push([p, pos]); continue; }
+      if (pos.pinch > 0) drawDivideNeck(p, pos);
+      drawPiece(p, pos.x, pos.y, pos.scale || 1);
     }
     for (const [p, pos] of airborne) {
       // detached ground shadow tracking the flight path
@@ -576,6 +662,7 @@
     tileCenter,
     addFx,
     animateMove,
+    animateDivide,
     setGame(G) {
       R.G = G;
       R.selected = null;
